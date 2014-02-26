@@ -26,6 +26,29 @@ struct nf_hook_ops http_ops = {
    .priority = NF_IP_PRI_FILTER,  
  }; 
 
+static int paser_get_url(unsigned char *url)
+{
+	unsigned char *host = url;
+	
+	while(*host != '\r' && *(host + 1) != '\n') host++;
+	host += 2; //skip '\r'  and  '\n'
+	
+	if(host[0] == 'H' && host[1] == 'o' && 
+		host[2] == 's' && host[3] == 't' && 
+		host[4] == ':' && host[5] == ' ')
+	{
+		host += 6; //skip "Host:"
+//temp code,which will be replace with hash-cmp function by cuipeng in future
+		printk("hook a get url Host: ");
+		for (host; *host != '\r' && *(host+1) != '\n'; host++)
+			printk("%c",*host);
+		printk("\n");
+//end by cuipeng
+	}
+
+
+}
+
 unsigned int hook_func(unsigned int hooknum, struct sk_buff *skb,
 						const struct net_device *in, 	const struct net_device *out,
 						int (*okfn)(struct sk_buff *))
@@ -50,19 +73,12 @@ unsigned int hook_func(unsigned int hooknum, struct sk_buff *skb,
 					data_len = ntohs(iph->tot_len) - iph_len - tcph_len;
 
 					if(payload[0] == 'G' && payload[1] == 'E' && payload[2] =='T' && payload[3] == ' ')
-						{
-							int i;
-							
-							for(i=0;i<data_len * 4;i++)
-							{
-								if(i%16 == 0)
-									printk("\n");
-								printk("%02x ", *payload++);
-							}
-						}
-
+					{
+						paser_get_url(payload);
 					}
-					break;
+
+				}
+				break;
 #if 0
               case IPPROTO_ICMP:
                     printk(" It's a ICMP PACKET\n");break;
