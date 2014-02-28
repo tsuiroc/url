@@ -11,6 +11,7 @@
 #include <linux/if_ether.h>
 #include <net/tcp.h>
 #include "url_hook.h"
+#include "url_redirect.h"
 
 MODULE_LICENSE("GPL"); 
 MODULE_AUTHOR("cui peng");
@@ -20,13 +21,14 @@ struct nf_hook_ops http_ops = {
    .list =  {NULL,NULL},  
    .hook = hook_func,  
    .pf = PF_INET,  
-   .hooknum = NF_INET_LOCAL_OUT, //NF_INET_PRE_ROUTING,  
+   .hooknum = NF_INIT_LOCAL_OUT, //NF_INET_PRE_ROUTING,  
    .priority = NF_IP_PRI_FILTER,  
  }; 
 
 int __init hook_http_init(void)
 { 
 	nf_register_hook(&http_ops);
+	url_redirect_init();
 	printk("starting register_hook .....\n");
 	return 0;
 }

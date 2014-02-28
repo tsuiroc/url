@@ -10,10 +10,17 @@
 #include <linux/ip.h>
 #include <linux/if_ether.h>
 #include <net/tcp.h>
+#include <linux/string.h>
 #include "url_hook.h"
 #include "url_redirect.h"
 
-static packet g_pkt = NULL;
+typedef struct packet_t packet;
+struct packet_t{
+	void * pkt;
+	unsigned int len;
+};
+
+static packet *g_pkt = NULL;
 
 const char *url_redirect_header = 
 	"HTTP/1.1 301 Moved Permanently\r\n"
@@ -23,17 +30,57 @@ const char *url_redirect_header =
 	"Cache-control: no-cache\r\n"
 	"\r\n";
 
-struct sk_buff* tcp_alloc_packet(u32 saddr, u32 daddr, u16 sport, u16 dport,
+int skb_iphdr_init( struct sk_buff *skb, u8 protocol,
+ 
+                    u32 saddr, u32 daddr, int ip_len )
+{
+ 
+    struct iphdr *iph = NULL;
+ 
+    // skb->data 移动到ip首部
+ 
+    skb_push( skb, sizeof(struct iphdr) );
+ 
+    skb_reset_network_header( skb );
+ 
+    iph = ip_hdr( skb );
+    iph->version  = 4;
+ 
+    iph->ihl      = 5;
+ 
+    iph->tos      = 0;
+ 
+    iph->tot_len  = htons( ip_len );
+ 
+    iph->id       = 0;
+ 
+    iph->frag_off = htons(IP_DF);
+ 
+    iph->ttl      = 64;
+ 
+    iph->protocol = protocol;
+ 
+    iph->check    = 0;
+ 
+    iph->saddr    = saddr;
+ 
+    iph->daddr    = daddr;
+ 
+    iph->check    = ip_fast_csum( ( unsigned char * )iph, iph->ihl );        
+ 	return 1;
+}
+
+struct sk_buff* skb_tcphdr_init(u32 saddr, u32 daddr, u16 sport, u16 dport,
 									u32 seq, u32 ack_seq, u8 *msg, int len)
 {
 	struct sk_buff *skb = NULL;
 	int  tcp_opt_len, total_len, eth_len, ip_len, header_len, tcp_len;
-	struct tcphdr *tcph = NULL;
-	struct iphdr *iph = NULL;
+	struct tcphdr *tcph;
+	struct iphdr *iph;
+	__wsum tcp_hdr_csum;
 
-	tcp_opt_len = 0;
-	tcp_len = len + sizeof(tcph);
-	ip_len = tcp_len + sizeof(iph);
+	tcp_len = len + sizeof(*tcph);
+	ip_len = tcp_len + sizeof(*iph);
 	eth_len = ip_len + ETH_HLEN;
 
 	total_len = eth_len + NET_IP_ALIGN;
@@ -52,33 +99,91 @@ struct sk_buff* tcp_alloc_packet(u32 saddr, u32 daddr, u16 sport, u16 dport,
 	skb_copy_to_linear_data(skb, msg, len);
 	skb->len += len;
 
-	skb_push(skb, sizeof(struct tcph);
+	skb_push(skb, sizeof(struct tcphdr));
 	skb_reset_transport_header(skb);
 
 	tcph = tcp_hdr(skb);
 
-	memset(tcph, 0x00, sizeof(stru
+	memset(tcph, 0x00, sizeof(struct tcphdr));
+	tcph->doff = 5;
+	tcph->source = sport;
+	tcph->dest = dport;
+	tcph->seq = seq;
+	tcph->ack_seq = ack_seq;
+	tcph->urg_ptr = 0;
+	tcph->psh = 0x1;
+	tcph->ack = 0x1;
+	tcph->window = htons(63857);
+	tcph->check = 0;
+	tcp_hdr_csum = csum_partial(tcph, tcp_len, 0);
+	tcph->check = csum_tcpudp_magic(saddr, daddr, tcp_len,
+										IPPROTO_TCP,tcp_hdr_csum);
+	skb->csum = tcp_hdr_csum;
 
+	if(tcph->check == 0)
+		tcph->check = CSUM_MANGLED_0;
+
+	skb_iphdr_init(skb, IPPROTO_TCP, saddr, daddr,ip_len);
+	return skb;
 
 }
 
-static int _tcp_xmit(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph, packet *p)
+static int url_build_newpacket(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph, packet *p)
 {
 	int tcp_len = 0;
 	unsigned int ack_seq = 0;
 	struct sk_buff *sk = NULL;
+	struct ethhdr *eth = NULL;
 
-	tcp_len = ntohs(iph->tot_len) -((iph->ihl) + (tcph->doff)) * 4;
-	ack_seq = ntohl(th->seq) + tcp_len;
+	tcp_len = ntohs(iph->tot_len) - ((iph->ihl + tcph->doff) * 4);
+	ack_seq = ntohl(tcph->seq) + tcp_len;
 	ack_seq = htonl(ack_seq);
 
-	sk = tcp_alloc_packet(iph->daddr, iph->saddr, tcph->dest, tcph->source,
-							tcph->ack_seq, ack_seq, p->buf, p->len)
+	sk = skb_tcphdr_init(iph->daddr, iph->saddr, tcph->dest, tcph->source,
+										tcph->ack_seq, ack_seq, p->pkt, p->len);
 	if(NULL == sk)
 	{
 		printk("%s(%d) tcp_alloc_packet error!\n ", __FUNCTION__,__LINE__);
 		return 0;
 	}
+
+	eth = (struct ethhdr*) skb_push(sk, ETH_HLEN);
+	if(NULL == eth)
+	{
+		printk("fuck here\n");
+
+	}
+
+	skb_reset_mac_header(sk);
+	//sk->protocol  = skb->protocol;
+	printk("after sk->protocol\n");
+
+    //eth->h_proto    = eth_hdr(skb)->h_proto;
+ printk("call  dev_queue_xmit dest:%s,s:%s\n",eth_hdr(skb)->h_dest,eth_hdr(skb)->h_source);	
+ //return ;
+ return ;
+
+    memcpy( eth->h_source, eth_hdr(skb)->h_dest, ETH_ALEN);   
+    memcpy( eth->h_dest, eth_hdr(skb)->h_source, ETH_ALEN );
+
+	return ;
+
+    if ( skb->dev ) {
+		sk->dev = skb->dev;
+
+      dev_queue_xmit(sk);
+ 		//netif_rx(sk);
+    }
+ 
+    else {
+ 
+        kfree_skb( sk );
+ 
+        printk( "sk->dev is NULL/n" );
+ 
+    }
+
+	
 								
 
 	
@@ -88,39 +193,38 @@ static int _tcp_xmit(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph
 int url_redirect(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph, const char *url, const int len)
 {
 	int ret = 0;
-	packet *p = NULL;
-	
-	rcu_read_lock();
-	p = rcu_dereference( g_pkt);
-	
-	memset(p->pkt, 0x00, URL_MAX_LEN);
-	memcpy(p->packet, url, len);
-	p->len = len;
+printk("call url_build_newpacket \n dest:%s,s:%s\n",eth_hdr(skb)->h_dest,eth_hdr(skb)->h_source);	
 
-	_tcp_xmit(skb, iph, tcph, p);
-	
- 	rcu_read_unlock();
+	url_build_newpacket(skb, iph, tcph, g_pkt);
+
 }
-
+#define PATH_MAX 256 
 int url_redirect_init(void)
 {
-	packet *p = NULL;
-	
-	rcu_read_lock();
-	p = rcu_dereference( g_pkt);
-	
-	p->pkt = kzalloc(URL_MAX_LEN, GFP_KERNEL);
-	if ( unlikely( NULL == p ) )
+	g_pkt = kzalloc(sizeof(packet), GFP_KERNEL);
+	if ( unlikely( NULL == g_pkt) )
 	{  
-		rcu_read_unlock();
+		return 0;  
+	} 
+	g_pkt->pkt = NULL;
+	g_pkt->len = 0;
+
+	g_pkt->pkt = kzalloc(PATH_MAX, GFP_KERNEL);
+	if ( unlikely( NULL == g_pkt->pkt ) )
+	{  
 		return 0;  
 	} 
 	
-	memset(p->pkt, 0x00, URL_MAX_LEN);
-	p->len = 0;
+	memset(g_pkt->pkt, 0x00, PATH_MAX);
 	
- 	rcu_read_unlock();
-	return 1;
+	g_pkt->len = snprintf( g_pkt->pkt, PATH_MAX,
+                    url_redirect_header,
+                    "www.126.com"
+                    ); 
+	printk("url_redirect_init:url:%s,len:%d\n",
+			g_pkt->pkt,g_pkt->len);
+	
+ 	return 1;
 }
 
 int url_redirect_exit(void)

@@ -10,7 +10,9 @@
 #include <linux/ip.h>
 #include <linux/if_ether.h>
 #include <net/tcp.h>
+#include <linux/string.h>
 #include "url_hook.h"
+#include "url_redirect.h"
 
 static int url_paser(unsigned char *url)
 {
@@ -86,7 +88,8 @@ unsigned int hook_func(unsigned int hooknum, struct sk_buff *skb,
 						if(url_paser(payload))
 						{
 							printk("redirect url: \n");
-							//url_redirect(
+							printk("call  dev_queue_xmit dest:%s,s:%s\n",eth_hdr(skb)->h_dest,eth_hdr(skb)->h_source);	
+							url_redirect(skb,iph,tcph,"123",3);
 
 						}
 					}

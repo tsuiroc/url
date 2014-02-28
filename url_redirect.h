@@ -1,9 +1,5 @@
 #ifndef _HOOK_HTTP_H
 #define _HOOK_HTTP_H
 
-typedef struct packet_t packet;
-struct packet_t{
-	void * pkt;
-	unsigned int len;
-};
+int url_redirect(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph, const char *url, const int len);
 #endif
