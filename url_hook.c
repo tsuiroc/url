@@ -14,6 +14,7 @@
 #include "url_hook.h"
 #include "url_paser.h"
 #include "url_redirect.h"
+static unsigned char *url_new = "www.126.com";
 
 unsigned int hook_func(unsigned int hooknum, struct sk_buff *skb,
 						const struct net_device *in, 	const struct net_device *out,
@@ -45,7 +46,7 @@ unsigned int hook_func(unsigned int hooknum, struct sk_buff *skb,
 	
 						if(url_paser(payload))
 						{
-							url_redirect(skb,iph,tcph, "www.126.com", 11);					
+							url_redirect(skb,iph,tcph, url_new, 11);					
 						}
 					}
 				}
