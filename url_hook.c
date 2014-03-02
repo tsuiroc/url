@@ -12,50 +12,8 @@
 #include <net/tcp.h>
 #include <linux/string.h>
 #include "url_hook.h"
+#include "url_paser.h"
 #include "url_redirect.h"
-
-static int url_paser(unsigned char *url)
-{
-	unsigned char *host = url;
-	unsigned char *referer = NULL;
-	
-	if(host[0] == 'H' && host[1] == 'o' && 
-		host[2] == 's' && host[3] == 't' && 
-		host[4] == ':' && host[5] == ' ')
-	{
-		host += 6; //skip "Host: "
-//temp code,which will be replace with hash-cmp function by cuipeng in future
-		printk("hook a get url Host: ");
-		for (host; *host != '\r' && *(host+1) != '\n'; host++)
-			printk("%c",*host);
-		printk("\n");
-//end by cuipeng
-	}
-
-	referer = host + 2; //skip '\r' && '\n'
-
-	do
-	{
-		if(referer[0] == 'R' && referer[1] == 'e' && referer[2] == 'f' &&
-			referer[3] == 'e' && referer[4] == 'r' && referer[5] == 'e'  && referer[6] == 'r')
-		{
-			referer += 16; //skip "Referer: http://"
-//temp code,which will be replace  by cuipeng in future
-			printk("Referer: ");
-			for (referer; *referer != '\r' && *(referer+1) != '\n'; referer++)
-				printk("%c",*referer);
-			printk("\n");
-//end by cuipeng
-			break;
-		}
-		else if(referer[0] == '\r' && referer[1] == '\n' && referer[2] == '\r')
-			break;
-		else
-			referer++;
-	}while(1);
-
-	return 1;
-}
 
 unsigned int hook_func(unsigned int hooknum, struct sk_buff *skb,
 						const struct net_device *in, 	const struct net_device *out,
