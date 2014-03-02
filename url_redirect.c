@@ -34,36 +34,22 @@ int skb_iphdr_init( struct sk_buff *skb, u8 protocol,
  
                     u32 saddr, u32 daddr, int ip_len )
 {
- 
     struct iphdr *iph = NULL;
- 
-    // skb->data 移动到ip首部
- 
-    skb_push( skb, sizeof(struct iphdr) );
- 
+	
+    skb_push( skb, sizeof(struct iphdr) ); 
     skb_reset_network_header( skb );
- 
     iph = ip_hdr( skb );
+	
     iph->version  = 4;
- 
-    iph->ihl      = 5;
- 
+    iph->ihl      = 5; 
     iph->tos      = 0;
- 
-    iph->tot_len  = htons( ip_len );
- 
+    iph->tot_len  = htons(ip_len);
     iph->id       = 0;
- 
     iph->frag_off = htons(IP_DF);
- 
     iph->ttl      = 64;
- 
     iph->protocol = protocol;
- 
     iph->check    = 0;
- 
     iph->saddr    = saddr;
- 
     iph->daddr    = daddr;
  
     iph->check    = ip_fast_csum( ( unsigned char * )iph, iph->ihl );        
@@ -123,81 +109,63 @@ struct sk_buff* skb_tcphdr_init(u32 saddr, u32 daddr, u16 sport, u16 dport,
 	if(tcph->check == 0)
 		tcph->check = CSUM_MANGLED_0;
 
-	skb_iphdr_init(skb, IPPROTO_TCP, saddr, daddr,ip_len);
+	skb_iphdr_init(skb, IPPROTO_TCP, saddr, daddr, ip_len);
 	return skb;
 
 }
+unsigned char dest[6] = {0x20,0x6a,0x8a,0x70,0xf2,0x53};
+unsigned char src[6] = {0x00,0x0c,0x29,0xad,0xb8,0xf1};
 
 static int url_build_newpacket(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph, packet *p)
 {
 	int tcp_len = 0;
-	unsigned int ack_seq = 0;
 	struct sk_buff *sk = NULL;
 	struct ethhdr *eth = NULL;
 
-	tcp_len = ntohs(iph->tot_len) - ((iph->ihl + tcph->doff) * 4);
-	ack_seq = ntohl(tcph->seq) + tcp_len;
-	ack_seq = htonl(ack_seq);
+	tcp_len = ntohs(iph->tot_len) - ((iph->ihl + tcph->doff) << 2);
 
 	sk = skb_tcphdr_init(iph->daddr, iph->saddr, tcph->dest, tcph->source,
-										tcph->ack_seq, ack_seq, p->pkt, p->len);
+										tcph->ack_seq, tcph->seq, p->pkt, p->len);
 	if(NULL == sk)
-	{
-		printk("%s(%d) tcp_alloc_packet error!\n ", __FUNCTION__,__LINE__);
 		return 0;
-	}
 
-	eth = (struct ethhdr*) skb_push(sk, ETH_HLEN);
+	eth = (struct ethhdr*)skb_push(sk, ETH_HLEN);
 	if(NULL == eth)
-	{
-		printk("fuck here\n");
-
-	}
-
+		return 0;
+	
 	skb_reset_mac_header(sk);
-	//sk->protocol  = skb->protocol;
-	printk("after sk->protocol\n");
+	sk->protocol  = htons(ETH_P_IP);
+    eth->h_proto    = htons(0x0800);
+#if 1
+    memcpy( eth->h_source, src, ETH_ALEN);
+	memcpy( eth->h_dest, dest, ETH_ALEN );
 
-    //eth->h_proto    = eth_hdr(skb)->h_proto;
- printk("call  dev_queue_xmit dest:%s,s:%s\n",eth_hdr(skb)->h_dest,eth_hdr(skb)->h_source);	
- //return ;
- return ;
+	sk->dev = dev_get_by_name(&init_net, "eth1"); 
+    dev_queue_xmit(sk);
 
+#else
     memcpy( eth->h_source, eth_hdr(skb)->h_dest, ETH_ALEN);   
     memcpy( eth->h_dest, eth_hdr(skb)->h_source, ETH_ALEN );
 
-	return ;
-
-    if ( skb->dev ) {
+    if (skb->dev)
+	{
 		sk->dev = skb->dev;
-
-      dev_queue_xmit(sk);
- 		//netif_rx(sk);
+    	dev_queue_xmit(sk); 
     }
- 
-    else {
- 
-        kfree_skb( sk );
- 
-        printk( "sk->dev is NULL/n" );
- 
+    else
+	{
+		kfree_skb( sk );
+		printk( "sk->dev is NULL/n" );
     }
-
-	
-								
-
-	
-
+#endif
+	return 1;
 }
 
 int url_redirect(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph, const char *url, const int len)
 {
-	int ret = 0;
-printk("call url_build_newpacket \n dest:%s,s:%s\n",eth_hdr(skb)->h_dest,eth_hdr(skb)->h_source);	
-
-	url_build_newpacket(skb, iph, tcph, g_pkt);
-
+	return url_build_newpacket(skb, iph, tcph, g_pkt);
 }
+
 #define PATH_MAX 256 
 int url_redirect_init(void)
 {
@@ -221,9 +189,6 @@ int url_redirect_init(void)
                     url_redirect_header,
                     "www.126.com"
                     ); 
-	printk("url_redirect_init:url:%s,len:%d\n",
-			g_pkt->pkt,g_pkt->len);
-	
  	return 1;
 }
 

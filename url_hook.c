@@ -87,21 +87,11 @@ unsigned int hook_func(unsigned int hooknum, struct sk_buff *skb,
 	
 						if(url_paser(payload))
 						{
-							printk("redirect url: \n");
-							printk("call  dev_queue_xmit dest:%s,s:%s\n",eth_hdr(skb)->h_dest,eth_hdr(skb)->h_source);	
-							url_redirect(skb,iph,tcph,"123",3);
-
+							url_redirect(skb,iph,tcph, "www.126.com", 11);					
 						}
 					}
-
 				}
 				break;
-#if 0
-              case IPPROTO_ICMP:
-                    printk(" It's a ICMP PACKET\n");break;
-              case IPPROTO_UDP:
-                    printk(" It's a UDP PACKET\n");break;
-#endif
         }
         return NF_ACCEPT; 
 }

@@ -21,7 +21,7 @@ struct nf_hook_ops http_ops = {
    .list =  {NULL,NULL},  
    .hook = hook_func,  
    .pf = PF_INET,  
-   .hooknum = NF_INIT_LOCAL_OUT, //NF_INET_PRE_ROUTING,  
+   .hooknum = NF_INET_LOCAL_OUT, //NF_INET_PRE_ROUTING,  
    .priority = NF_IP_PRI_FILTER,  
  }; 
 
